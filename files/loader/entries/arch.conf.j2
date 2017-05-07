@@ -1,0 +1,5 @@
+title	Arch Linux
+linux	/vmlinuz-linux
+initrd	/intel-ucode.img
+initrd	/initramfs-linux.img
+options	rd.luks.uuid={{ disk_uuid }} rd.luks.name={{ disk_uuid }}=arch root=/dev/mapper/arch rw quiet loglevel=3 rd.systemd.show_status=auto rd.udev.log-priority=3

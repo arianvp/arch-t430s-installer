@@ -1,0 +1,184 @@
+- hosts: 127.0.0.1
+  connection: local
+  vars:
+    # find the disk UUID by executing 'lsblk -o +UUID'
+    disk_uuid: 44a0e451-421a-4f36-a183-39e0d3968304 
+  tasks:
+    - name: Set timezone to Europe/Amsterdam
+      file:
+        src: /usr/share/zoneinfo/Europe/Amsterdam
+        dest: /etc/localtime
+        force: yes
+      register: timezone
+    - name: Set the hardware clock
+      command: hwclock --systohc 
+      when: timezone.changed
+    - name: enable ntp
+      service:
+        name: systemd-timesyncd
+        enabled: yes
+    - name: locale-gen
+      locale_gen:
+        name: en_US.UTF-8
+        state: present
+    - name: set locale
+      copy:
+        src: files/locale.conf
+        dest: /etc/locale.conf
+    - name: copy mkinitcpio.conf
+      copy:
+        src: files/mkinitcpio.conf
+        dest: /etc/mkinitcpio.conf
+      register: mkinitcpio
+    - name: mkinitcpio
+      command: mkinitcpio -p linux
+      when: mkinitcpio.changed
+
+    - name: update pacman cache
+      pacman:
+        update_cache: yes
+      ignore_errors: yes
+
+    - name: update systemd to present version
+      pacman:
+        name: systemd
+        state: present
+
+    - name: install systemd-boot bootloader
+      command: bootctl --path=/boot install
+      args:
+        creates: /boot/EFI/systemd/systemd-bootx64.efi
+
+    - name: install intel-ucode
+      pacman:
+        name: intel-ucode
+        state: present
+
+    - name: copy bootloader config
+      copy:
+        src: files/loader/loader.conf
+        dest: /boot/loader/loader.conf
+
+    - name: copy arch linux bootloader entry
+      template:
+        src: files/loader/entries/arch.conf.j2
+        dest: /boot/loader/entries/arch.conf
+
+    - name: install networkmanager
+      pacman:
+        name: networkmanager
+        state: present
+
+    - name: enable networkmanager
+      service:
+        name: NetworkManager
+        enabled: yes
+        state: started
+
+    - name: uninstall netctl
+      pacman:
+        name: netctl
+        state: absent
+        recurse: yes
+
+    - name: install avahi
+      pacman:
+        name: avahi
+        state: present
+
+    - name: install nss-mdns
+      pacman:
+        name: nss-mdns
+        state: present
+
+    - name: configure nsswitch
+      copy:
+        src: files/nsswitch.conf
+        dest: /etc/nsswitch.conf
+
+    - name: enable avahi
+      service:
+        name: avahi-daemon
+        enabled: yes
+
+    - name: install sudo
+      pacman:
+        name: sudo
+        state: present
+
+    - name: Add wheel group
+      group:
+        name: wheel
+        state: present
+
+    - name: Add wheel group to sudoers
+      lineinfile:
+        dest: /etc/sudoers
+        state: present
+        regexp: '^%wheel'
+        line: '%wheel ALL=(ALL) NOPASSWD: ALL'
+        validate: visudo -cf %s
+
+    - name: Add arian user
+      user:
+        name: arian
+        comment: Arian van Putten
+        group: wheel
+   
+    - name: base-devel
+      pacman:
+        name: base-devel
+        state: present 
+
+    - block:
+        - file:
+            name: /tmp/pacaur_install
+            state: directory
+        - get_url:
+            url: https://aur.archlinux.org/cgit/aur.git/plain/PKGBUILD?h=cower
+            dest: /tmp/pacaur_install/PKGBUILD
+        - command: gpg --keyserver hkp://pool.sks-keyservers.net --recv-keys 487EACC08557AD082088DABA1EB2638FF56C0C53
+        - command: makepkg --syncdeps --install --noconfirm
+          args:
+            chdir: /tmp/pacaur_install
+        - get_url:
+            url: https://aur.archlinux.org/cgit/aur.git/plain/PKGBUILD?h=pacaur
+            dest: /tmp/pacaur_install/PKGBUILD
+        - command: makepkg --syncdeps --install --noconfirm
+          args:
+            chdir: /tmp/pacaur_install
+        - file:
+            name: /tmp/pacaur_install
+            state: absent
+      become: true
+      become_user: arian 
+
+    - name: Install gdm
+      pacman:
+        name: gdm
+        state: present
+
+    - name: enable gdm
+      service:
+        name: gdm
+        enabled: yes
+
+    - name: Install gnome
+      pacman:
+        name: gnome
+        state: present
+
+    - name: install seahorse
+      pacman:
+        name: seahorse
+        state: present
+
+    - name: install arc theme
+      pacman:
+        name: arc-gtk-theme
+        state: present
+        
+    - name: install arc theme
+      pacman:
+        name: arc-icon-theme
+        state: present
